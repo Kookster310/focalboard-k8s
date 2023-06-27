@@ -1,0 +1,79 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fbdata-pvc
+  namespace: focalboard-ns
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: focalboard
+  namespace: focalboard-ns
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: focalboard
+  template:
+    metadata:
+      labels:
+        app: focalboard
+    spec:
+      containers:
+        - name: focalboard
+          image: nicoulaj/focalboard
+          ports:
+            - containerPort: 8000
+          env:
+            - name: VIRTUAL_HOST
+              value: focalboard.310networks.com
+            - name: VIRTUAL_PORT
+              value: "8000"
+          volumeMounts:
+            - name: fbdata-volume
+              mountPath: /opt/focalboard/data
+      volumes:
+        - name: fbdata-volume
+          persistentVolumeClaim:
+            claimName: fbdata-pvc
+      enableServiceLinks: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: focalboard
+  namespace: focalboard-ns
+spec:
+  selector:
+    app: focalboard
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: focalboard-ingress
+  namespace: focalboard-ns
+  annotations:
+    kubernetes.io/ingress.class: traefik
+spec:
+  rules:
+    - host: focalboard.310networks.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: focalboard
+                port:
+                  number: 8000
